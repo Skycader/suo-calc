@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>СУО М1 Абрамс — Фикс Спидометра</title>
+    <style>
+      body {
+        background-color: #0b0f07;
+        color: #00ff33;
+        font-family: "Courier New", Courier, monospace;
+        padding: 20px;
+        margin: 0;
+      }
+      .container {
+        max-width: 950px;
+        margin: 0 auto;
+        border: 2px solid #00ff33;
+        background-color: #0d1409;
+        box-shadow: 0 0 15px rgba(0, 255, 51, 0.2);
+        padding: 20px;
+      }
+      h1,
+      h3 {
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-top: 0;
+        border-bottom: 1px dashed #00ff33;
+        padding-bottom: 10px;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+        border-bottom: 1px dashed #00ff33;
+        padding-bottom: 20px;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+      }
+      label {
+        margin-bottom: 5px;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      select,
+      input {
+        background-color: #000;
+        border: 1px solid #00ff33;
+        color: #00ff33;
+        padding: 8px;
+        font-family: inherit;
+        font-size: 16px;
+        outline: none;
+      }
+      .btn-panel {
+        grid-column: span 2;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      button {
+        background-color: #1a3311;
+        border: 2px solid #00ff33;
+        color: #00ff33;
+        padding: 12px;
+        font-size: 16px;
+        font-family: inherit;
+        cursor: pointer;
+        text-transform: uppercase;
+        font-weight: bold;
+        transition: all 0.2s;
+      }
+      button:hover:not(:disabled) {
+        background-color: #00ff33;
+        color: #000;
+        box-shadow: 0 0 10px #00ff33;
+      }
+      button:disabled {
+        border-color: #004400;
+        color: #004400;
+        cursor: not-allowed;
+      }
+      #fireBtn {
+        background-color: #441111;
+        border-color: #ff3333;
+        color: #ff3333;
+      }
+      #fireBtn:hover:not(:disabled) {
+        background-color: #ff3333;
+        color: #000;
+        box-shadow: 0 0 10px #ff3333;
+      }
+      .screen-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      #terminal {
+        background-color: #050804;
+        border: 1px solid #00ff33;
+        height: 380px;
+        padding: 10px;
+        overflow-y: auto;
+        font-size: 13px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .canvas-container {
+        border: 1px solid #00ff33;
+        background-color: #050804;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      canvas {
+        width: 100%;
+        height: 360px;
+      }
+      .flight-timer {
+        position: absolute;
+        top: 10px;
+        left: 20px;
+        font-size: 14px;
+        font-weight: bold;
+        background: rgba(5, 8, 4, 0.9);
+        padding: 6px 12px;
+        border: 1px solid #00ff33;
+        display: none;
+        z-index: 10;
+      }
+      .cpu-badge {
+        color: #ff9900;
+        border: 1px solid #ff9900;
+        padding: 2px 6px;
+        font-size: 11px;
+        display: inline-block;
+        margin-top: 5px;
+        text-align: center;
+      }
+      .blink {
+        animation: blinker 1s linear infinite;
+      }
+      @keyframes blinker {
+        50% {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>СУО M256 — Тактический Комплекс Выстрела</h1>
+      <div style="text-align: center; margin-bottom: 15px">
+        <span class="cpu-badge"
+          >РЕЖИМ ЭМУЛЯЦИИ: Бортовой ЭВМ М68000 (Замедление циклов ИИ)</span
+        >
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="shellSelect">Тип боеприпаса:</label>
+          <select id="shellSelect">
+            <option value="KE-W">ОБПС KE-W (Вольфрамовый лом)</option>
+            <option value="M830">Кумулятивный M830 HEAT-FS</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="obstacleSelect">Анализ преграды лазером:</label>
+          <select id="obstacleSelect">
+            <option value="none">Чистый горизонт (Открытая цель)</option>
+            <option value="clay_wall">Глиняная стена (Разрушаемая)</option>
+            <option value="desert_fortress_wall">
+              Текстурный Колосс Синая (НЕРАЗРУШАЕМЫЙ)
+            </option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="rangeInput">Горизонтальная дистанция (метров):</label>
+          <input
+            type="number"
+            id="rangeInput"
+            value="3000"
+            min="500"
+            max="100000"
+            step="500"
+          />
+        </div>
+        <div class="control-group">
+          <label for="heightInput">Высота цели (+ выше / - ниже вас, м):</label>
+          <input
+            type="number"
+            id="heightInput"
+            value="50"
+            min="-2000"
+            max="5000"
+            step="10"
+          />
+        </div>
+        <div class="btn-panel">
+          <button id="calcBtn" onclick="startTargetingProcess()">
+            1. Расчет баллистики
+          </button>
+          <button id="fireBtn" onclick="executeShellLaunch()" disabled>
+            2. ОГОНЬ! (Выстрел)
+          </button>
+        </div>
+      </div>
+
+      <div class="screen-layout">
+        <div>
+          <h3>Тактический terminal СУО</h3>
+          <div id="terminal">Готов к замеру дистанции...</div>
+        </div>
+        <div>
+          <h3>Осциллограф траектории</h3>
+          <div class="canvas-container">
+            <div id="timerDisplay" class="flight-timer">
+              Летит: 0.00 с / 0.00 с | Спидометр: 0 м/с
+            </div>
+            <canvas id="ballisticCanvas" width="450" height="360"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const SHELL_DB = {
+        "KE-W": {
+          name: "ОБПС KE-W",
+          v0: 1585,
+          m: 4.0,
+          d: 0.022,
+          Cx: 0.22,
+          type: "APFSDS",
+          basePen: 583,
+        },
+        M830: {
+          name: "M830 HEAT-FS",
+          v0: 1140,
+          m: 13.1,
+          d: 0.12,
+          Cx: 0.7,
+          type: "HEAT",
+          basePen: 480,
+        },
+      };
+
+      const OBSTACLE_DB = {
+        none: { name: "Открытая зона", invulnerable: false, hp: 0 },
+        clay_wall: { name: "Глиняный забор", invulnerable: false, hp: 80 },
+        desert_fortress_wall: {
+          name: "Текстурный Колосс Синая",
+          invulnerable: true,
+          hp: Infinity,
+        },
+      };
+
+      const term = document.getElementById("terminal");
+      const calcBtn = document.getElementById("calcBtn");
+      const fireBtn = document.getElementById("fireBtn");
+      const timerDisplay = document.getElementById("timerDisplay");
+      const canvas = document.getElementById("ballisticCanvas");
+      const ctx = canvas.getContext("2d");
+
+      let globalFinalSimResult = null;
+      let globalCurrentRange = 3000;
+      let globalTargetHeight = 50;
+      let globalCalculatedAngle = 0;
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      function log(text, clear = false) {
+        if (clear) term.innerHTML = "";
+        term.innerHTML += text + "\n";
+        term.scrollTop = term.scrollHeight;
+      }
+
+      function clearCanvas() {
+        ctx.fillStyle = "#050804";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "#14290d";
+        ctx.lineWidth = 1;
+
+        for (let i = 0; i < canvas.width; i += 45) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i, canvas.height - 40);
+          ctx.stroke();
+        }
+        for (let i = 0; i < canvas.height - 40; i += 35) {
+          ctx.beginPath();
+          ctx.moveTo(0, i);
+          ctx.lineTo(canvas.width, i);
+          ctx.stroke();
+        }
+      }
+
+      function drawRuler(maxRange) {
+        const lineY = canvas.height - 30;
+        ctx.strokeStyle = "#00ff33";
+        ctx.lineWidth = 2;
+        ctx.fillStyle = "#00ff33";
+        ctx.font = "10px Courier New";
+
+        ctx.beginPath();
+        ctx.moveTo(20, lineY);
+        ctx.lineTo(canvas.width - 20, lineY);
+        ctx.stroke();
+
+        for (let i = 0; i <= 4; i++) {
+          const pct = i * 0.25;
+          const currentMeters = maxRange * pct;
+          const canvasX = pct * (canvas.width - 40) + 20;
+
+          ctx.beginPath();
+          ctx.moveTo(canvasX, lineY - 4);
+          ctx.lineTo(canvasX, lineY + 4);
+          ctx.stroke();
+
+          let label =
+            currentMeters >= 1000
+              ? (currentMeters / 1000).toFixed(1) + " км"
+              : Math.round(currentMeters) + " м";
+          ctx.textAlign = "center";
+          ctx.fillText(label, canvasX, lineY + 16);
+        }
+      }
+
+      function drawTanks(maxRange, maxHeight, targetHeight, barrelAngleDeg) {
+        const groundY = (canvas.height - 40) * 0.8;
+        const scaleY =
+          maxHeight > 10 ? ((canvas.height - 40) * 0.55) / maxHeight : 1;
+
+        const myX = 20;
+        const myY = groundY;
+
+        ctx.save();
+        ctx.strokeStyle = "#00ff33";
+        ctx.lineWidth = 2;
+        ctx.fillStyle = "#050804";
+
+        ctx.beginPath();
+        ctx.arc(myX - 12, myY - 3, 3, 0, 2 * Math.PI);
+        ctx.arc(myX + 12, myY - 3, 3, 0, 2 * Math.PI);
+        ctx.rect(myX - 12, myY - 6, 24, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillRect(myX - 15, myY - 14, 30, 8);
+        ctx.strokeRect(myX - 15, myY - 14, 30, 8);
+
+        ctx.fillRect(myX - 8, myY - 20, 16, 6);
+        ctx.strokeRect(myX - 8, myY - 20, 16, 6);
+
+        const barrelLength = 22;
+        const rad = (barrelAngleDeg * Math.PI) / 180;
+        ctx.beginPath();
+        ctx.moveTo(myX, myY - 17);
+        ctx.lineTo(
+          myX + barrelLength * Math.cos(rad),
+          myY - 17 - barrelLength * Math.sin(rad),
+        );
+        ctx.stroke();
+        ctx.restore();
+        const enemyX = canvas.width - 25;
+        const enemyY = groundY - targetHeight * scaleY;
+        ctx.save();
+        ctx.strokeStyle = "#ff3333";
+        ctx.lineWidth = 2;
+        ctx.fillStyle = "#050804";
+        ctx.beginPath();
+        ctx.arc(enemyX - 12, enemyY - 3, 3, 0, 2 * Math.PI);
+        ctx.arc(enemyX + 12, enemyY - 3, 3, 0, 2 * Math.PI);
+        ctx.rect(enemyX - 12, enemyY - 6, 24, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillRect(enemyX - 15, enemyY - 14, 30, 8);
+        ctx.strokeRect(enemyX - 15, enemyY - 14, 30, 8);
+        ctx.fillRect(enemyX - 8, enemyY - 20, 16, 6);
+        ctx.strokeRect(enemyX - 8, enemyY - 20, 16, 6);
+        ctx.beginPath();
+        ctx.moveTo(enemyX, enemyY - 17);
+        ctx.lineTo(enemyX - 20, enemyY - 17);
+        ctx.stroke();
+        ctx.restore();
+      }
+      async function startTargetingProcess() {
+        calcBtn.disabled = true;
+        fireBtn.disabled = true;
+        timerDisplay.style.display = "none";
+        globalFinalSimResult = null;
+        log("ЗАПУСК ЛАЗЕРНОГО ДАЛЬНОМЕРА...", true);
+        const shellType = document.getElementById("shellSelect").value;
+        const obstacleType = document.getElementById("obstacleSelect").value;
+        globalCurrentRange = parseFloat(
+          document.getElementById("rangeInput").value,
+        );
+        globalTargetHeight = parseFloat(
+          document.getElementById("heightInput").value,
+        );
+        await sleep(600);
+        const obstacle = OBSTACLE_DB[obstacleType];
+        log("ГОРИЗОНТАЛЬНАЯ ДИСТАНЦИЯ: " + globalCurrentRange + " м.");
+        log(
+          "ВЫСОТА ЦЕЛИ ПО ВЕРТИКАЛИ: " +
+            (globalTargetHeight > 0 ? "+" : "") +
+            globalTargetHeight +
+            " м.",
+        );
+        log("АНАЛИЗ ПРЕГРАДЫ: [" + obstacle.name + "]");
+        if (obstacle.invulnerable) {
+          log("\n!!! ВНИМАНИЕ: ОБЪЕКТ НЕРАЗРУШАЕМЫЙ !!!");
+          log("Святая глина Синая заблокирует любой снаряд. Огонь отменен.");
+          calcBtn.disabled = false;
+          return;
+        }
+        log("\nЗапуск ЭВМ баллистического перебора...");
+        await calculateBallisticsCPU(
+          shellType,
+          globalCurrentRange,
+          globalTargetHeight,
+          obstacle,
+        );
+      }
+      async function calculateBallisticsCPU(
+        shellType,
+        range,
+        targetHeight,
+        obstacle,
+      ) {
+        const targetLineAngleDeg =
+          (Math.atan2(targetHeight, range) * 180) / Math.PI;
+        let lowAngle = targetLineAngleDeg - 5;
+        let highAngle = targetLineAngleDeg + 45;
+        let bestAngle = 0;
+        let finalSim = null;
+        const tolerance = 0.1;
+        let totalUndershoots = 0;
+        clearCanvas();
+        drawRuler(range);
+        for (let iteration = 1; iteration <= 24; iteration++) {
+          bestAngle = (lowAngle + highAngle) / 2;
+          log(
+            "ЭВМ Шаг #" +
+              iteration +
+              ": Проверка абсолютного угла ствола: " +
+              bestAngle.toFixed(3) +
+              "°",
+          );
+          finalSim = await simulateFlightIntegral(
+            shellType,
+            range,
+            targetHeight,
+            bestAngle,
+          );
+          if (finalSim.isUndershoot) {
+            totalUndershoots++;
+            lowAngle = bestAngle;
+          } else {
+            if (finalSim.reachedY > targetHeight + tolerance) {
+              highAngle = bestAngle;
+            } else if (finalSim.reachedY < targetHeight - tolerance) {
+              lowAngle = bestAngle;
+            } else {
+              break;
+            }
+          }
+          clearCanvas();
+          drawDynamicTrajectory(
+            finalSim.pathPoints,
+            range,
+            finalSim.maxHeight,
+            targetHeight,
+            false,
+          );
+          drawTanks(range, finalSim.maxHeight, targetHeight, bestAngle);
+          drawRuler(range);
+          await sleep(60);
+        }
+        if (finalSim.isUndershoot || totalUndershoots >= 24) {
+          log("\n=====================================");
+          log("АНУЛИРОВАНИЕ РАСЧЕТА: ОТКАЗ СУО");
+          log("=====================================");
+          log("• ОШИБКА: ЦЕЛЬ ВНЕ ЗОНЫ ДОСЯГАЕМОСТИ!");
+          log("• Измените позицию или выберите другую цель.");
+          calcBtn.disabled = false;
+          return;
+        }
+        globalCalculatedAngle = bestAngle;
+        const correctionAngle = bestAngle - targetLineAngleDeg;
+        const shell = SHELL_DB[shellType];
+        log("\n=====================================");
+        log("РАСЧЕТ СВЕРХДАЛЬНЕЙ СУО ЗАВЕРШЕН");
+        log("=====================================");
+        log(
+          "• Угол места цели (визирный) : " +
+            targetLineAngleDeg.toFixed(3) +
+            "°",
+        );
+        log(
+          "• ТРЕБУЕМАЯ ПОПРАВКА НА ПАДЕНИЕ: " +
+            (correctionAngle > 0 ? "+" : "") +
+            correctionAngle.toFixed(3) +
+            "°",
+        );
+        log("• ИТОГОВЫЙ ПОЛНЫЙ УГОЛ СТВОЛА  : " + bestAngle.toFixed(3) + "°");
+        log(
+          "• МАКСИМАЛЬНАЯ ВЫСОТА ДУГИ     : " +
+            Math.round(finalSim.maxHeight) +
+            " метров",
+        );
+        log(
+          "• ВРЕМЯ ПОЛЕТА ДО ЦЕЛИ         : " +
+            finalSim.tof.toFixed(2) +
+            " сек",
+        );
+        log(
+          "• СКОРОСТЬ ПРИ ПОПАДАНИИ       : " +
+            Math.round(finalSim.finalVelocity) +
+            " м/с",
+        );
+        let pen = shell.basePen;
+        if (shell.type === "APFSDS") {
+          const speedRatio = finalSim.finalVelocity / shell.v0;
+          pen = Math.round(shell.basePen * speedRatio * speedRatio);
+        }
+        log("• Кинетическое пробитие       : ~" + pen + " мм стали");
+        globalFinalSimResult = finalSim;
+        clearCanvas();
+        drawDynamicTrajectory(
+          finalSim.pathPoints,
+          range,
+          finalSim.maxHeight,
+          targetHeight,
+          true,
+        );
+        drawTanks(range, finalSim.maxHeight, targetHeight, bestAngle);
+        drawRuler(range);
+        calcBtn.disabled = false;
+        fireBtn.disabled = false;
+      }
+      async function simulateFlightIntegral(
+        shellType,
+        range,
+        targetHeight,
+        totalLaunchAngleDeg,
+      ) {
+        const shell = SHELL_DB[shellType];
+        const rho = 1.225;
+        const g = 9.81;
+        const S = Math.PI * Math.pow(shell.d / 2, 2);
+        const alphaRad = (totalLaunchAngleDeg * Math.PI) / 180;
+        let t = 0;
+        let x = 0;
+        let y = 0;
+        let totalPathDistance = 0;
+        let maxHeight = 0;
+        let vx = shell.v0 * Math.cos(alphaRad);
+        let vy = shell.v0 * Math.sin(alphaRad);
+        const dt = 0.004;
+        let pathPoints = [];
+        let steps = 0;
+        let isUndershoot = false;
+        while (x < range) {
+          const v = Math.sqrt(vx * vx + vy * vy);
+          const F_drag = 0.5 * rho * v * v * shell.Cx * S;
+          const ax = -(F_drag * (vx / v)) / shell.m;
+          const ay = -g - (F_drag * (vy / v)) / shell.m;
+          const dx = vx * dt;
+          const dy = vy * dt;
+          x += dx;
+          y += dy;
+          if (y > maxHeight) maxHeight = y;
+          totalPathDistance += Math.sqrt(dx * dx + dy * dy);
+          vx += ax * dt;
+          vy += ay * dt;
+          t += dt;
+          steps++;
+          if (steps % 10 === 0) {
+            /* Зашиваем в каждую точку массива текущую скорость на этом участке */ pathPoints.push(
+              { x: x, y: y, currentT: t, currentV: v },
+            );
+          }
+          const floorLimit = Math.min(0, targetHeight) - 200;
+          if (y < floorLimit && x < range) {
+            isUndershoot = true;
+            break;
+          }
+          if (t > 40 || vx <= 0) {
+            isUndershoot = true;
+            break;
+          }
+        }
+        return {
+          tof: t,
+          reachedY: y,
+          maxHeight: maxHeight,
+          finalVelocity: Math.sqrt(vx * vx + vy * vy),
+          totalPathDistance: totalPathDistance,
+          pathPoints: pathPoints,
+          isUndershoot: isUndershoot,
+        };
+      }
+      async function executeShellLaunch() {
+        if (!globalFinalSimResult) return;
+        calcBtn.disabled = true;
+        fireBtn.disabled = true;
+        log("\n[ВЫСТРЕЛ]: Залп произведен!");
+        timerDisplay.style.display = "block";
+        const points = globalFinalSimResult.pathPoints;
+        const totalTof = globalFinalSimResult.tof;
+        const finalVelocity = globalFinalSimResult.finalVelocity;
+        const maxHeight = globalFinalSimResult.maxHeight;
+        const scaleY =
+          maxHeight > 10 ? ((canvas.height - 40) * 0.55) / maxHeight : 1;
+        const groundY = (canvas.height - 40) * 0.8;
+        for (let i = 0; i < points.length; i++) {
+          const pt = points[i];
+          /* ВЫВОД СКОРОСТИ В СТРОКУ ТАЙМЕРА В РЕАЛЬНОМ ВРЕМЕНИ */ timerDisplay.innerHTML =
+            "Летит: " +
+            pt.currentT.toFixed(2) +
+            " c / " +
+            totalTof.toFixed(2) +
+            " c | Скорость: " +
+            Math.round(pt.currentV) +
+            " м/с";
+          clearCanvas();
+          drawDynamicTrajectory(
+            points,
+            globalCurrentRange,
+            maxHeight,
+            globalTargetHeight,
+            true,
+          );
+          drawTanks(
+            globalCurrentRange,
+            maxHeight,
+            globalTargetHeight,
+            globalCalculatedAngle,
+          );
+          drawRuler(globalCurrentRange);
+          const currentX =
+            (pt.x / globalCurrentRange) * (canvas.width - 40) + 20;
+          const currentY = groundY - pt.y * scaleY;
+          ctx.fillStyle = "#ffffff";
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = "#00ff33";
+          ctx.beginPath();
+          ctx.arc(currentX, currentY, 4, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          await sleep(20);
+        }
+        /* ФИКСАЦИЯ СКОРОСТИ ПРИ ПОПАДАНИИ НА ЭКРАНЕ */ timerDisplay.innerHTML =
+          "ПОПАДАНИЕ: " +
+          totalTof.toFixed(2) +
+          " c / " +
+          totalTof.toFixed(2) +
+          " c | Встреча: " +
+          Math.round(finalVelocity) +
+          " м/с";
+        log(
+          "[СУО]: Фиксация попадания на скорости " +
+            Math.round(finalVelocity) +
+            " м/с.",
+        );
+        calcBtn.disabled = false;
+        fireBtn.disabled = false;
+      }
+      function drawDynamicTrajectory(
+        points,
+        maxRange,
+        maxHeight,
+        targetHeight,
+        isFinal,
+      ) {
+        if (!points || points.length === 0) return;
+        ctx.strokeStyle = isFinal ? "#00ff33" : "rgba(0, 100, 20, 0.3)";
+        ctx.lineWidth = isFinal ? 2 : 1;
+        const scaleY =
+          maxHeight > 10 ? ((canvas.height - 40) * 0.55) / maxHeight : 1;
+        const groundY = (canvas.height - 40) * 0.8;
+        ctx.beginPath();
+        points.forEach((p, idx) => {
+          const canvasX = (p.x / maxRange) * (canvas.width - 40) + 20;
+          const canvasY = groundY - p.y * scaleY;
+          if (idx === 0) ctx.moveTo(canvasX, canvasY);
+          else ctx.lineTo(canvasX, canvasY);
+        });
+        ctx.stroke();
+      }
+      clearCanvas();
+      drawRuler(3000);
+      drawTanks(3000, 10, 50, 0);
+    </script>
+  </body>
+</html>
